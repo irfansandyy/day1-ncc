@@ -64,6 +64,14 @@ The application supports JWT authentication, per-user persistent chat history, c
 export HF_TOKEN=$(cat ~/.cache/huggingface/token)
 ./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K
 ```
+If your machine has limited RAM/VRAM, use the lower-memory quantization:
+
+```bash
+./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
+```
+
+The startup script now also auto-fallbacks from `Q6_K` to `Q4_K_M` when model initialization fails (can be disabled with `AUTO_FALLBACK_LOW_MEM=0`).
+It also unloads previously running models before startup to avoid hidden memory contention (can be disabled with `UNLOAD_EXISTING_MODELS=0`).
 
 Alternative login method:
 
@@ -90,6 +98,11 @@ LLM_BASE_URL=http://model-runner.docker.internal/engines
 LLM_MODEL_NAME=hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K
 LLM_CTX_SIZE=4096
 ```
+Important memory note:
+
+- `LLM_CTX_SIZE` in this project limits backend prompt assembly.
+- Increasing it (for example to `16384`) increases runtime KV cache pressure during inference and can cause out-of-memory on smaller machines.
+- If you get `inference backend took too long to initialize`, use a smaller quantization (`Q4_K_M`) and keep context in the `2048-4096` range.
 
 With this setup, backend calls Docker Model Runner OpenAI-compatible endpoint at:
 
