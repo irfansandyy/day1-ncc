@@ -13,7 +13,9 @@ Fitur utama:
 - Penyimpanan riwayat chat per user secara persisten
 - Fitur New Chat untuk memulai percakapan baru
 - Penyimpanan pesan user dan AI ke database
-- Integrasi model `meta-llama/Llama-3.2-3B-Instruct` dari Hugging Face melalui Docker Model Runner
+- Integrasi model `hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K` dari Hugging Face melalui Docker Model Runner
+
+Limiter konteks di backend dikonfigurasi dengan `LLM_CTX_SIZE=4096` untuk menjaga pemakaian memori tetap efisien di CPU-only environment.
 
 ## B. Penjelasan Endpoint /health
 
@@ -74,7 +76,7 @@ Langkah build image dan menjalankan container:
    - `ACME_EMAIL=<email-anda>`
 3. Login ke Hugging Face dan jalankan model di Docker Model Runner:
    - `hf auth login`
-   - `./scripts/docker-model-run.sh hf.co/meta-llama/Llama-3.2-3B-Instruct`
+   - `./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K`
 4. Build dan jalankan stack:
    - `docker compose --env-file .env up -d --build`
 5. Cek status dan health:
@@ -98,7 +100,7 @@ Langkah deploy ke server:
 4. Salin `.env.example` menjadi `.env`, lalu sesuaikan variabel produksi
 5. Login Hugging Face dan jalankan model di Docker Model Runner:
    - `hf auth login`
-   - `./scripts/docker-model-run.sh hf.co/meta-llama/Llama-3.2-3B-Instruct`
+   - `./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K`
 6. Jalankan:
    - `docker compose --env-file .env up -d --build`
 7. Atur DNS domain ke IP VPS (A record)

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODEL_REF="${1:-hf.co/meta-llama/Llama-3.2-3B-Instruct}"
+MODEL_REF="${1:-hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K}"
+HF_PATH="/root/.local/bin:${PATH}"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker CLI not found in PATH" >&2
@@ -14,12 +15,13 @@ if ! docker model version >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! command -v hf >/dev/null 2>&1; then
-  echo "hf CLI not found. Install it first, then run: hf auth login" >&2
+if ! env PATH="${HF_PATH}" command -v hf >/dev/null 2>&1; then
+  echo "hf CLI not found in PATH '/root/.local/bin'." >&2
+  echo "Try: env PATH=\"/root/.local/bin:\$PATH\" hf auth login" >&2
   exit 1
 fi
 
-echo "Make sure you already ran: hf auth login"
+echo "Make sure you already ran: env PATH=\"/root/.local/bin:\$PATH\" hf auth login"
 echo "Starting model: ${MODEL_REF}"
 docker model run --detach "${MODEL_REF}"
 

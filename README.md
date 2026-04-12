@@ -8,7 +8,7 @@ This repository contains a full-stack chat application with:
 - Local LLM Inference: Docker Model Runner using Hugging Face model source
 - Reverse Proxy: Caddy with automatic TLS (Let's Encrypt)
 
-The application supports JWT authentication, per-user persistent chat history, creating new chats, and AI responses using `meta-llama/Llama-3.2-3B-Instruct` via Docker Model Runner.
+The application supports JWT authentication, per-user persistent chat history, creating new chats, and AI responses using `hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K` via Docker Model Runner.
 
 ## 1. Project Structure
 
@@ -52,7 +52,8 @@ The application supports JWT authentication, per-user persistent chat history, c
 
 - Model family: `meta-llama/Llama-3.2-3B-Instruct`
 - Runtime: Docker Model Runner (OpenAI-compatible endpoint)
-- Model source: Hugging Face (`hf.co/meta-llama/Llama-3.2-3B-Instruct`)
+- Model source: Hugging Face (`hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K`)
+- Context limiter: `LLM_CTX_SIZE=4096` enforced in backend request assembly
 - No model reload per request:
   - Model is loaded and managed by Docker Model Runner.
   - Backend uses a singleton LLM client (`services.GetLLMService`) that reuses the same HTTP client and base URL.
@@ -61,7 +62,7 @@ The application supports JWT authentication, per-user persistent chat history, c
 
 ```bash
 hf auth login
-./scripts/docker-model-run.sh hf.co/meta-llama/Llama-3.2-3B-Instruct
+./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K
 ```
 
 Then start the application stack:
@@ -80,7 +81,8 @@ Default `.env` values are already configured for this flow:
 
 ```bash
 LLM_BASE_URL=http://model-runner.docker.internal/engines
-LLM_MODEL_NAME=hf.co/meta-llama/Llama-3.2-3B-Instruct
+LLM_MODEL_NAME=hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K
+LLM_CTX_SIZE=4096
 ```
 
 With this setup, backend calls Docker Model Runner OpenAI-compatible endpoint at:
@@ -164,7 +166,7 @@ For local testing without public DNS, keep `DOMAIN=localhost`.
 
 ```bash
 hf auth login
-./scripts/docker-model-run.sh hf.co/meta-llama/Llama-3.2-3B-Instruct
+./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K
 ```
 
 ## 7. Run With Docker Compose
@@ -221,7 +223,7 @@ npm run dev
 
 ```bash
 hf auth login
-./scripts/docker-model-run.sh hf.co/meta-llama/Llama-3.2-3B-Instruct
+./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K
 ```
 
 1. Start services:

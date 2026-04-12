@@ -14,6 +14,7 @@ type Config struct {
 	AllowedOrigin          string
 	LLMBaseURL             string
 	LLMModel               string
+	LLMCtxSize             int
 	LLMTimeout             time.Duration
 	DBMaxOpenConns         int
 	DBMaxIdleConns         int
@@ -30,7 +31,8 @@ func Load() Config {
 		TokenTTL:               time.Duration(getEnvInt("JWT_TTL_MINUTES", 60*24)) * time.Minute,
 		AllowedOrigin:          getEnv("ALLOWED_ORIGIN", "http://localhost:3000"),
 		LLMBaseURL:             getEnv("LLM_BASE_URL", "http://localhost:8081"),
-		LLMModel:               getEnv("LLM_MODEL", "meta-llama/Llama-3.2-3B-Instruct"),
+		LLMModel:               getEnv("LLM_MODEL", "hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K"),
+		LLMCtxSize:             getEnvInt("LLM_CTX_SIZE", 4096),
 		LLMTimeout:             time.Duration(getEnvInt("LLM_TIMEOUT_SECONDS", 60)) * time.Second,
 		DBMaxOpenConns:         getEnvInt("DB_MAX_OPEN_CONNS", 25),
 		DBMaxIdleConns:         getEnvInt("DB_MAX_IDLE_CONNS", 25),

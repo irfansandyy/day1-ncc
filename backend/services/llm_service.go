@@ -19,6 +19,7 @@ import (
 type LLMService struct {
 	baseURL string
 	model   string
+	ctxSize int
 	client  *http.Client
 }
 
@@ -32,6 +33,7 @@ func GetLLMService(cfg config.Config) *LLMService {
 		llmInstance = &LLMService{
 			baseURL: strings.TrimSuffix(cfg.LLMBaseURL, "/"),
 			model:   cfg.LLMModel,
+			ctxSize: cfg.LLMCtxSize,
 			client: &http.Client{
 				Timeout: cfg.LLMTimeout,
 			},
@@ -100,6 +102,8 @@ func (s *LLMService) GenerateReply(ctx context.Context, history []models.Message
 		requestMessages = append(requestMessages, chatMessage{Role: "user", Content: userPrompt})
 	}
 
+	requestMessages = limitMessagesByContext(requestMessages, s.ctxSize)
+
 	payload := chatCompletionRequest{
 		Model:       s.model,
 		Messages:    requestMessages,
@@ -142,6 +146,53 @@ func (s *LLMService) GenerateReply(ctx context.Context, history []models.Message
 	}
 
 	return strings.TrimSpace(completion.Choices[0].Message.Content), nil
+}
+
+func limitMessagesByContext(messages []chatMessage, ctxSize int) []chatMessage {
+	if len(messages) <= 1 || ctxSize <= 0 {
+		return messages
+	}
+
+	inputBudget := ctxSize - 512
+	if inputBudget < 512 {
+		inputBudget = ctxSize
+	}
+
+	system := messages[0]
+	usedTokens := estimateTokens(system.Content) + 8
+
+	recentReverse := make([]chatMessage, 0, len(messages)-1)
+	for i := len(messages) - 1; i >= 1; i-- {
+		msg := messages[i]
+		msgTokens := estimateTokens(msg.Content) + 8
+
+		if usedTokens+msgTokens > inputBudget {
+			if len(recentReverse) == 0 {
+				recentReverse = append(recentReverse, msg)
+			}
+			continue
+		}
+
+		recentReverse = append(recentReverse, msg)
+		usedTokens += msgTokens
+	}
+
+	trimmed := make([]chatMessage, 0, len(recentReverse)+1)
+	trimmed = append(trimmed, system)
+	for i := len(recentReverse) - 1; i >= 0; i-- {
+		trimmed = append(trimmed, recentReverse[i])
+	}
+
+	return trimmed
+}
+
+func estimateTokens(content string) int {
+	charCount := len([]rune(content))
+	if charCount == 0 {
+		return 0
+	}
+
+	return (charCount / 4) + 1
 }
 
 func (s *LLMService) HealthCheck(ctx context.Context) error {
