@@ -2,7 +2,7 @@
 
 ## A. Deskripsi Service
 
-Aplikasi yang dibuat adalah platform chat AI full-stack yang terdiri dari frontend Next.js (App Router), backend Golang REST API, PostgreSQL, dan model AI lokal menggunakan llama.cpp.
+Aplikasi yang dibuat adalah platform chat AI full-stack yang terdiri dari frontend Next.js (App Router), backend Golang REST API, PostgreSQL, dan model AI lokal menggunakan Docker Model Runner.
 
 Untuk deployment publik, arsitektur sekarang menggunakan reverse proxy Caddy sehingga seluruh akses user masuk lewat HTTPS port 443 dengan sertifikat TLS otomatis dari Let's Encrypt.
 
@@ -13,7 +13,7 @@ Fitur utama:
 - Penyimpanan riwayat chat per user secara persisten
 - Fitur New Chat untuk memulai percakapan baru
 - Penyimpanan pesan user dan AI ke database
-- Integrasi model `meta-llama/Llama-3.2-3B-Instruct` (GGUF Q4) yang berjalan lokal
+- Integrasi model `meta-llama/Llama-3.2-3B-Instruct` dari Hugging Face melalui Docker Model Runner
 
 ## B. Penjelasan Endpoint /health
 
@@ -46,7 +46,7 @@ Contoh response sederhana:
 Cara kerja pengecekan service:
 
 - Database dicek dengan `PingContext` ke PostgreSQL
-- LLM dicek ringan ke endpoint health llama.cpp (`/health`, fallback `/v1/models`)
+- LLM dicek ringan ke endpoint Docker Model Runner (`/v1/models`)
 - Endpoint tetap mengembalikan HTTP 200 agar orchestration health monitor tetap stabil
 
 ## C. Bukti Akses Endpoint
@@ -72,8 +72,9 @@ Langkah build image dan menjalankan container:
 2. Isi variabel reverse proxy/TLS pada `.env`:
    - `DOMAIN=<domain-anda>`
    - `ACME_EMAIL=<email-anda>`
-3. Pastikan file model tersedia di folder `models/`:
-   - `models/Llama-3.2-3B-Instruct.Q4_K_M.gguf`
+3. Login ke Hugging Face dan jalankan model di Docker Model Runner:
+   - `hf auth login`
+   - `./scripts/docker-model-run.sh hf.co/meta-llama/Llama-3.2-3B-Instruct`
 4. Build dan jalankan stack:
    - `docker compose --env-file .env up -d --build`
 5. Cek status dan health:
@@ -82,7 +83,7 @@ Langkah build image dan menjalankan container:
 
 Penggunaan docker-compose:
 
-- Menjalankan service `db`, `llm`, `backend`, `frontend`, `reverse-proxy`
+- Menjalankan service `db`, `backend`, `frontend`, `reverse-proxy`
 - Semua service memiliki `healthcheck`
 - Dependency antar service menggunakan `depends_on` dengan `condition: service_healthy`
 - Semua service menggunakan restart policy `unless-stopped`
@@ -95,7 +96,9 @@ Langkah deploy ke server:
 2. Install Docker Engine dan Docker Compose plugin
 3. Clone repository aplikasi ke VPS
 4. Salin `.env.example` menjadi `.env`, lalu sesuaikan variabel produksi
-5. Upload model GGUF ke folder `models/`
+5. Login Hugging Face dan jalankan model di Docker Model Runner:
+   - `hf auth login`
+   - `./scripts/docker-model-run.sh hf.co/meta-llama/Llama-3.2-3B-Instruct`
 6. Jalankan:
    - `docker compose --env-file .env up -d --build`
 7. Atur DNS domain ke IP VPS (A record)
@@ -111,7 +114,7 @@ Konfigurasi yang dilakukan:
 - Reverse proxy Caddy sebagai single entrypoint publik di port 443
 - TLS otomatis Let's Encrypt
 - Integrasi backend ke PostgreSQL internal compose
-- Integrasi backend ke llama.cpp service internal compose
+- Integrasi backend ke Docker Model Runner melalui `model-runner.docker.internal`
 
 Cara menjalankan di VPS:
 
@@ -129,7 +132,6 @@ Kendala utama:
 
 Solusi:
 
-- Menggunakan model GGUF quantized Q4 untuk menekan penggunaan memori
-- Menjalankan llama.cpp sebagai service terpisah agar model di-load sekali saat startup
+- Menjalankan model lewat Docker Model Runner agar lifecycle model dikelola terpusat
 - Menambahkan healthcheck dan dependency health agar backend hanya start saat dependency siap
 - Menggunakan Caddy agar provisioning dan renew sertifikat Let's Encrypt berjalan otomatis

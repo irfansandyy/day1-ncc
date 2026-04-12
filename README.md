@@ -5,10 +5,10 @@ This repository contains a full-stack chat application with:
 - Frontend: Next.js App Router
 - Backend: Go REST API
 - Database: PostgreSQL
-- Local LLM Inference: llama.cpp server with GGUF quantized model
+- Local LLM Inference: Docker Model Runner using Hugging Face model source
 - Reverse Proxy: Caddy with automatic TLS (Let's Encrypt)
 
-The application supports JWT authentication, per-user persistent chat history, creating new chats, and AI responses using `meta-llama/Llama-3.2-3B-Instruct` in GGUF format.
+The application supports JWT authentication, per-user persistent chat history, creating new chats, and AI responses using `meta-llama/Llama-3.2-3B-Instruct` via Docker Model Runner.
 
 ## 1. Project Structure
 
@@ -46,22 +46,47 @@ The application supports JWT authentication, per-user persistent chat history, c
 - Persistent chat sessions per user in PostgreSQL
 - New chat creation endpoint (`POST /api/chats`)
 - Message persistence for both user and AI
-- Local LLM integration with llama.cpp server
+- Local LLM integration with Docker Model Runner
 
 ## 3. LLM Requirements Compliance
 
 - Model family: `meta-llama/Llama-3.2-3B-Instruct`
-- Quantized file expected: `Llama-3.2-3B-Instruct.Q4_K_M.gguf`
-- Runtime: llama.cpp server (`ghcr.io/ggerganov/llama.cpp:server`)
-- CPU-friendly mode configured (`--threads`, `-c 4096`, no GPU offloading)
+- Runtime: Docker Model Runner (OpenAI-compatible endpoint)
+- Model source: Hugging Face (`hf.co/meta-llama/Llama-3.2-3B-Instruct`)
 - No model reload per request:
-  - Model is loaded once by the dedicated `llm` container at startup.
+  - Model is loaded and managed by Docker Model Runner.
   - Backend uses a singleton LLM client (`services.GetLLMService`) that reuses the same HTTP client and base URL.
 
-Place the model file at:
+### Default startup flow (Docker Model Runner)
+
+```bash
+hf auth login
+./scripts/docker-model-run.sh hf.co/meta-llama/Llama-3.2-3B-Instruct
+```
+
+Then start the application stack:
+
+```bash
+docker compose --env-file .env up -d --build
+```
+
+Or run the default one-command bootstrap:
+
+```bash
+./scripts/up-with-dmr.sh
+```
+
+Default `.env` values are already configured for this flow:
+
+```bash
+LLM_BASE_URL=http://model-runner.docker.internal/engines
+LLM_MODEL_NAME=hf.co/meta-llama/Llama-3.2-3B-Instruct
+```
+
+With this setup, backend calls Docker Model Runner OpenAI-compatible endpoint at:
 
 ```text
-./models/Llama-3.2-3B-Instruct.Q4_K_M.gguf
+http://model-runner.docker.internal/engines/v1/chat/completions
 ```
 
 ## 4. API Endpoints
@@ -114,7 +139,7 @@ Returns:
 ### What is checked
 
 - Database readiness via `db.PingContext`
-- LLM readiness via lightweight call to llama.cpp (`/health`, fallback to `/v1/models`)
+- LLM readiness via lightweight Docker Model Runner model check (`/v1/models`)
 
 The endpoint always responds with HTTP 200 and reports service state details.
 
@@ -126,13 +151,6 @@ The endpoint always responds with HTTP 200 and reports service state details.
 cp .env.example .env
 ```
 
-1. Download or place GGUF model in `./models` folder:
-
-```bash
-mkdir -p models
-# Put Llama-3.2-3B-Instruct.Q4_K_M.gguf in ./models
-```
-
 1. Configure reverse proxy domain and ACME email in `.env`:
 
 ```bash
@@ -141,6 +159,13 @@ ACME_EMAIL=admin@example.com
 ```
 
 For local testing without public DNS, keep `DOMAIN=localhost`.
+
+1. Start Docker Model Runner model:
+
+```bash
+hf auth login
+./scripts/docker-model-run.sh hf.co/meta-llama/Llama-3.2-3B-Instruct
+```
 
 ## 7. Run With Docker Compose
 
@@ -192,7 +217,13 @@ npm run dev
 1. SSH into VPS and install Docker + Compose plugin.
 1. Clone repository on VPS.
 1. Create `.env` from `.env.example` and set secure values: strong `JWT_SECRET`, `DOMAIN` set to your public domain (required for valid Let's Encrypt certificate), and `ACME_EMAIL` set to your email for certificate registration.
-1. Upload GGUF model to `./models` on VPS.
+1. On VPS, authenticate Hugging Face and start the Docker Model Runner model:
+
+```bash
+hf auth login
+./scripts/docker-model-run.sh hf.co/meta-llama/Llama-3.2-3B-Instruct
+```
+
 1. Start services:
 
 ```bash
@@ -213,7 +244,7 @@ Routing is handled by Caddy:
 
 ## 10. Performance Notes
 
-- CPU-only inference configuration for llama.cpp
+- CPU-friendly local inference via Docker Model Runner
 - Connection pooling for PostgreSQL in backend
 - Centralized singleton LLM client in backend
 - Lightweight health checks
