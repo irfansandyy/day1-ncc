@@ -1,0 +1,134 @@
+package handlers
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strconv"
+
+	"app-backend/middleware"
+	"app-backend/repositories"
+	"app-backend/services"
+
+	"github.com/go-chi/chi/v5"
+)
+
+type ChatHandler struct {
+	chatService *services.ChatService
+}
+
+type createChatRequest struct {
+	Title string `json:"title"`
+}
+
+type sendMessageRequest struct {
+	Content string `json:"content"`
+}
+
+func NewChatHandler(chatService *services.ChatService) *ChatHandler {
+	return &ChatHandler{chatService: chatService}
+}
+
+func (h *ChatHandler) ListChats(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "missing user context")
+		return
+	}
+
+	chats, err := h.chatService.ListChats(r.Context(), userID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to fetch chats")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"items": chats})
+}
+
+func (h *ChatHandler) CreateChat(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "missing user context")
+		return
+	}
+
+	var req createChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	chat, err := h.chatService.CreateChat(r.Context(), userID, req.Title)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to create chat")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, chat)
+}
+
+func (h *ChatHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "missing user context")
+		return
+	}
+
+	chatID, err := parseChatID(r)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid chat id")
+		return
+	}
+
+	messages, err := h.chatService.ListMessages(r.Context(), userID, chatID)
+	if err != nil {
+		if errors.Is(err, repositories.ErrChatNotFound) {
+			writeJSONError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to fetch messages")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"items": messages})
+}
+
+func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "missing user context")
+		return
+	}
+
+	chatID, err := parseChatID(r)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid chat id")
+		return
+	}
+
+	var req sendMessageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	userMsg, assistantMsg, err := h.chatService.SendMessage(r.Context(), userID, chatID, req.Content)
+	if err != nil {
+		if errors.Is(err, repositories.ErrChatNotFound) {
+			writeJSONError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to process message")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user_message":      userMsg,
+		"assistant_message": assistantMsg,
+	})
+}
+
+func parseChatID(r *http.Request) (int64, error) {
+	chatIDRaw := chi.URLParam(r, "chatID")
+	return strconv.ParseInt(chatIDRaw, 10, 64)
+}

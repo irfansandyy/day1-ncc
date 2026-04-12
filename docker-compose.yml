@@ -1,0 +1,134 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  llm:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    restart: unless-stopped
+    env_file:
+      - .env
+    command:
+      - -m
+      - /models/${LLM_MODEL_FILE}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - -c
+      - "4096"
+      - --threads
+      - "${LLM_THREADS}"
+      - --parallel
+      - "1"
+      - --batch-size
+      - "256"
+      - --temp
+      - "0.7"
+    volumes:
+      - ./models:/models:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:8080/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      APP_PORT: "80"
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_TTL_MINUTES: ${JWT_TTL_MINUTES}
+      DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS}
+      DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS}
+      DB_CONN_MAX_LIFETIME_MINUTES: ${DB_CONN_MAX_LIFETIME_MINUTES}
+      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST}
+      ALLOWED_ORIGIN: https://${DOMAIN:-localhost}
+      LLM_BASE_URL: http://llm:8080
+      LLM_MODEL: ${LLM_MODEL_NAME}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS}
+    depends_on:
+      db:
+        condition: service_healthy
+      llm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: https://${DOMAIN:-localhost}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/login >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  reverse-proxy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@localhost}
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
