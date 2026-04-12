@@ -61,8 +61,14 @@ The application supports JWT authentication, per-user persistent chat history, c
 ### Default startup flow (Docker Model Runner)
 
 ```bash
-hf auth login
+export HF_TOKEN=$(cat ~/.cache/huggingface/token)
 ./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K
+```
+
+Alternative login method:
+
+```bash
+env PATH="$HOME/.local/bin:$PATH" hf auth login
 ```
 
 Then start the application stack:
