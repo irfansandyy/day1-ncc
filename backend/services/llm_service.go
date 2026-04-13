@@ -210,7 +210,8 @@ func (s *LLMService) tryCompletionFallback(ctx context.Context, prompt string, m
 
 	var lastErr error
 	for _, apiBase := range s.apiBaseCandidates() {
-		for _, endpoint := range openAIEndpointCandidates(apiBase, "/completion") {
+		completionEndpoints := append(openAIEndpointCandidates(apiBase, "/completions"), openAIEndpointCandidates(apiBase, "/completion")...)
+		for _, endpoint := range completionEndpoints {
 			req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 			if reqErr != nil {
 				lastErr = reqErr

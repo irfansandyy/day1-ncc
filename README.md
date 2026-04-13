@@ -139,7 +139,7 @@ After this, Nginx serves HTTPS on `443` and redirects `80 -> 443`.
 Default `.env` values are already configured for this flow:
 
 ```bash
-LLM_BASE_URL=http://model-runner.docker.internal/engines
+LLM_BASE_URL=http://model-runner.docker.internal:12434/engines/v1
 LLM_MODEL_NAME=hf.co/bartowski/Llama-3.2-1B-Instruct-GGUF:Q6_K
 LLM_CTX_SIZE=4096
 ```
@@ -152,7 +152,7 @@ Important memory note:
 With this setup, backend calls Docker Model Runner OpenAI-compatible endpoint at:
 
 ```text
-http://model-runner.docker.internal/engines/v1/chat/completions
+http://model-runner.docker.internal:12434/engines/v1/chat/completions
 ```
 
 ## 4. API Endpoints

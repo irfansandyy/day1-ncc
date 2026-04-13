@@ -73,5 +73,5 @@ echo "Checking running models:"
 docker model ps || true
 
 echo "Default .env values for backend are already aligned with DMR:"
-echo "LLM_BASE_URL=http://model-runner.docker.internal/engines"
+echo "LLM_BASE_URL=http://model-runner.docker.internal:12434/engines/v1"
 echo "LLM_MODEL_NAME=${ACTIVE_MODEL_REF}"
