@@ -8,6 +8,8 @@ This repository contains a full-stack chat application with:
 - Local LLM Inference: Docker Model Runner using Hugging Face model source
 - Reverse Proxy: Caddy with automatic TLS (Let's Encrypt)
 
+You can also run with host-level Nginx on a VPS (recommended when Nginx is already installed on the host).
+
 The application supports JWT authentication, per-user persistent chat history, creating new chats, and AI responses using `hf.co/bartowski/Llama-3.2-1B-Instruct-GGUF:Q6_K` via Docker Model Runner.
 
 ## 1. Project Structure
@@ -32,7 +34,10 @@ The application supports JWT authentication, per-user persistent chat history, c
 │   └── init/
 │       └── 001_init.sql
 ├── deploy/
-│   └── Caddyfile
+│   ├── Caddyfile
+│   └── nginx/
+│       ├── day1-ncc-http-bootstrap.conf
+│       └── day1-ncc.conf
 ├── docker-compose.yml
 ├── .env.example
 └── REPORT_ID.md
@@ -82,7 +87,7 @@ env PATH="$HOME/.local/bin:$PATH" hf auth login
 Then start the application stack:
 
 ```bash
-docker compose --env-file .env up -d --build
+docker compose --profile caddy --env-file .env up -d --build
 ```
 
 Or run the default one-command bootstrap:
@@ -90,6 +95,46 @@ Or run the default one-command bootstrap:
 ```bash
 ./scripts/up-with-dmr.sh
 ```
+
+To use host Nginx (instead of Caddy container):
+
+```bash
+USE_HOST_NGINX=1 ./scripts/up-with-dmr.sh
+```
+
+This starts `db`, `backend`, and `frontend` only, with loopback host bindings:
+
+- Frontend: `127.0.0.1:3000`
+- Backend: `127.0.0.1:8080`
+
+Use these Nginx templates:
+
+- `deploy/nginx/day1-ncc-http-bootstrap.conf` for first certificate issuance on HTTP.
+- `deploy/nginx/day1-ncc.conf` for final HTTPS (443) + redirect.
+
+VPS host Nginx setup (Ubuntu):
+
+```bash
+sudo mkdir -p /var/www/certbot
+sudo cp deploy/nginx/day1-ncc-http-bootstrap.conf /etc/nginx/sites-available/day1-ncc.conf
+sudo sed -i 's/chat.example.com/YOUR_DOMAIN/g' /etc/nginx/sites-available/day1-ncc.conf
+sudo ln -sf /etc/nginx/sites-available/day1-ncc.conf /etc/nginx/sites-enabled/day1-ncc.conf
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Issue TLS certificate (Let's Encrypt) and reload Nginx:
+
+```bash
+sudo apt-get update && sudo apt-get install -y certbot
+sudo certbot certonly --webroot -w /var/www/certbot -d YOUR_DOMAIN --email YOUR_EMAIL --agree-tos --no-eff-email
+sudo cp deploy/nginx/day1-ncc.conf /etc/nginx/sites-available/day1-ncc.conf
+sudo sed -i 's/chat.example.com/YOUR_DOMAIN/g' /etc/nginx/sites-available/day1-ncc.conf
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+After this, Nginx serves HTTPS on `443` and redirects `80 -> 443`.
 
 Default `.env` values are already configured for this flow:
 
@@ -191,7 +236,13 @@ hf auth login
 ## 7. Run With Docker Compose
 
 ```bash
-docker compose --env-file .env up -d --build
+docker compose --profile caddy --env-file .env up -d --build
+```
+
+Or host Nginx mode (no Caddy container):
+
+```bash
+docker compose --env-file .env up -d --build db backend frontend
 ```
 
 Check status:
@@ -262,6 +313,11 @@ Routing is handled by Caddy:
 
 - `/` to frontend service
 - `/api/*` and `/health` to backend service
+
+Alternative with host Nginx:
+
+- `/` to `http://127.0.0.1:3000`
+- `/api/*` and `/health` to `http://127.0.0.1:8080`
 
 ## 10. Performance Notes
 
