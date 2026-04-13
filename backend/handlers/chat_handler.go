@@ -60,6 +60,10 @@ func (h *ChatHandler) CreateChat(w http.ResponseWriter, r *http.Request) {
 
 	chat, err := h.chatService.CreateChat(r.Context(), userID, req.Title)
 	if err != nil {
+		if errors.Is(err, repositories.ErrUserNotFound) {
+			writeJSONError(w, http.StatusUnauthorized, "session is invalid, please login again")
+			return
+		}
 		writeJSONError(w, http.StatusInternalServerError, "failed to create chat")
 		return
 	}

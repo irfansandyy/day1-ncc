@@ -142,6 +142,10 @@ export default function ChatShell({ activeChatId }: ChatShellProps) {
       router.push(`/chat/${chat.id}`);
     } catch (err) {
       const apiError = err as APIError;
+      if (apiError.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       setError(apiError.message);
     }
   }

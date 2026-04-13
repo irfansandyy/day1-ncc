@@ -78,10 +78,23 @@ func (s *LLMService) apiBaseCandidates() []string {
 	base := strings.TrimSuffix(s.baseURL, "/")
 	candidates := []string{base}
 
-	if strings.HasSuffix(base, "/engines") {
+	if strings.HasSuffix(base, "/engines/v1") {
+		enginesBase := strings.TrimSuffix(base, "/v1")
+		rootBase := strings.TrimSuffix(enginesBase, "/engines")
+		candidates = append(candidates, enginesBase, enginesBase+"/llama.cpp", rootBase, rootBase+"/engines/llama.cpp")
+	} else if strings.HasSuffix(base, "/engines") {
 		candidates = append(candidates, strings.TrimSuffix(base, "/engines"))
-	} else if !strings.HasSuffix(base, "/v1") && !strings.HasSuffix(base, "/engines/v1") {
+		candidates = append(candidates, base+"/llama.cpp")
+	} else if strings.HasSuffix(base, "/v1") {
+		withoutV1 := strings.TrimSuffix(base, "/v1")
+		candidates = append(candidates, withoutV1)
+		if strings.HasSuffix(withoutV1, "/engines") {
+			rootBase := strings.TrimSuffix(withoutV1, "/engines")
+			candidates = append(candidates, withoutV1+"/llama.cpp", rootBase, rootBase+"/engines/llama.cpp")
+		}
+	} else {
 		candidates = append(candidates, base+"/engines")
+		candidates = append(candidates, base+"/engines/llama.cpp")
 	}
 
 	seen := map[string]bool{}
@@ -97,12 +110,28 @@ func (s *LLMService) apiBaseCandidates() []string {
 	return unique
 }
 
-func toOpenAIEndpoint(apiBase, suffix string) string {
-	if strings.HasSuffix(apiBase, "/v1") || strings.HasSuffix(apiBase, "/engines/v1") {
-		return apiBase + suffix
+func openAIEndpointCandidates(apiBase, suffix string) []string {
+	base := strings.TrimSuffix(apiBase, "/")
+	candidates := make([]string, 0, 2)
+
+	if strings.HasSuffix(base, "/v1") || strings.HasSuffix(base, "/engines/v1") {
+		candidates = append(candidates, base+suffix)
+	} else {
+		candidates = append(candidates, base+"/v1"+suffix)
+		candidates = append(candidates, base+suffix)
 	}
 
-	return apiBase + "/v1" + suffix
+	seen := map[string]bool{}
+	unique := make([]string, 0, len(candidates))
+	for _, item := range candidates {
+		if seen[item] {
+			continue
+		}
+		seen[item] = true
+		unique = append(unique, item)
+	}
+
+	return unique
 }
 
 func (s *LLMService) GenerateReply(ctx context.Context, history []models.Message, userPrompt string) (string, error) {
@@ -151,42 +180,43 @@ func (s *LLMService) GenerateReply(ctx context.Context, history []models.Message
 
 	var lastErr error
 	for _, apiBase := range s.apiBaseCandidates() {
-		endpoint := toOpenAIEndpoint(apiBase, "/chat/completions")
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
-		if reqErr != nil {
-			lastErr = reqErr
-			continue
+		for _, endpoint := range openAIEndpointCandidates(apiBase, "/chat/completions") {
+			req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+			if reqErr != nil {
+				lastErr = reqErr
+				continue
+			}
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, doErr := s.client.Do(req)
+			if doErr != nil {
+				lastErr = fmt.Errorf("llm request failed via %s: %w", endpoint, doErr)
+				continue
+			}
+
+			respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+			resp.Body.Close()
+
+			if resp.StatusCode == http.StatusNotFound {
+				lastErr = fmt.Errorf("llm endpoint not found at %s: status=%d body=%s", endpoint, resp.StatusCode, string(respBody))
+				continue
+			}
+
+			if resp.StatusCode >= http.StatusBadRequest {
+				return "", fmt.Errorf("llm request failed via %s: status=%d body=%s", endpoint, resp.StatusCode, string(respBody))
+			}
+
+			var completion chatCompletionResponse
+			if decodeErr := json.Unmarshal(respBody, &completion); decodeErr != nil {
+				return "", decodeErr
+			}
+
+			if len(completion.Choices) == 0 {
+				return "", errors.New("llm returned no choices")
+			}
+
+			return strings.TrimSpace(completion.Choices[0].Message.Content), nil
 		}
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, doErr := s.client.Do(req)
-		if doErr != nil {
-			lastErr = fmt.Errorf("llm request failed via %s: %w", endpoint, doErr)
-			continue
-		}
-
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		resp.Body.Close()
-
-		if resp.StatusCode == http.StatusNotFound {
-			lastErr = fmt.Errorf("llm endpoint not found at %s: status=%d body=%s", endpoint, resp.StatusCode, string(respBody))
-			continue
-		}
-
-		if resp.StatusCode >= http.StatusBadRequest {
-			return "", fmt.Errorf("llm request failed via %s: status=%d body=%s", endpoint, resp.StatusCode, string(respBody))
-		}
-
-		var completion chatCompletionResponse
-		if decodeErr := json.Unmarshal(respBody, &completion); decodeErr != nil {
-			return "", decodeErr
-		}
-
-		if len(completion.Choices) == 0 {
-			return "", errors.New("llm returned no choices")
-		}
-
-		return strings.TrimSpace(completion.Choices[0].Message.Content), nil
 	}
 
 	if lastErr != nil {
@@ -266,25 +296,26 @@ func (s *LLMService) HealthCheck(ctx context.Context) error {
 
 	var lastErr error
 	for _, apiBase := range s.apiBaseCandidates() {
-		modelsURL := toOpenAIEndpoint(apiBase, "/models")
-		modelsReq, err := http.NewRequestWithContext(fallbackCtx, http.MethodGet, modelsURL, nil)
-		if err != nil {
-			lastErr = err
-			continue
-		}
+		for _, modelsURL := range openAIEndpointCandidates(apiBase, "/models") {
+			modelsReq, err := http.NewRequestWithContext(fallbackCtx, http.MethodGet, modelsURL, nil)
+			if err != nil {
+				lastErr = err
+				continue
+			}
 
-		resp, reqErr := s.client.Do(modelsReq)
-		if reqErr != nil {
-			lastErr = fmt.Errorf("llm health request failed via %s: %w", modelsURL, reqErr)
-			continue
-		}
-		resp.Body.Close()
+			resp, reqErr := s.client.Do(modelsReq)
+			if reqErr != nil {
+				lastErr = fmt.Errorf("llm health request failed via %s: %w", modelsURL, reqErr)
+				continue
+			}
+			resp.Body.Close()
 
-		if resp.StatusCode == http.StatusOK {
-			return nil
-		}
+			if resp.StatusCode == http.StatusOK {
+				return nil
+			}
 
-		lastErr = fmt.Errorf("llm health failed via %s with status %d", modelsURL, resp.StatusCode)
+			lastErr = fmt.Errorf("llm health failed via %s with status %d", modelsURL, resp.StatusCode)
+		}
 	}
 
 	if lastErr != nil {

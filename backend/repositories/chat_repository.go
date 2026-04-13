@@ -4,8 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 
 	"app-backend/models"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var ErrChatNotFound = errors.New("chat not found")
@@ -37,6 +40,10 @@ func (r *PostgresChatRepository) CreateChat(ctx context.Context, userID int64, t
 	err := r.db.QueryRowContext(ctx, query, userID, title).
 		Scan(&chat.ID, &chat.UserID, &chat.Title, &chat.CreatedAt, &chat.UpdatedAt)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" && strings.Contains(pgErr.ConstraintName, "chats_user_id_fkey") {
+			return models.Chat{}, ErrUserNotFound
+		}
 		return models.Chat{}, err
 	}
 
