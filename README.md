@@ -8,7 +8,7 @@ This repository contains a full-stack chat application with:
 - Local LLM Inference: Docker Model Runner using Hugging Face model source
 - Reverse Proxy: Caddy with automatic TLS (Let's Encrypt)
 
-The application supports JWT authentication, per-user persistent chat history, creating new chats, and AI responses using `hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K` via Docker Model Runner.
+The application supports JWT authentication, per-user persistent chat history, creating new chats, and AI responses using `hf.co/bartowski/Llama-3.2-1B-Instruct-GGUF:Q6_K` via Docker Model Runner.
 
 ## 1. Project Structure
 
@@ -50,9 +50,9 @@ The application supports JWT authentication, per-user persistent chat history, c
 
 ## 3. LLM Requirements Compliance
 
-- Model family: `meta-llama/Llama-3.2-3B-Instruct`
+- Model family: `meta-llama/Llama-3.2-1B-Instruct`
 - Runtime: Docker Model Runner (OpenAI-compatible endpoint)
-- Model source: Hugging Face (`hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K`)
+- Model source: Hugging Face (`hf.co/bartowski/Llama-3.2-1B-Instruct-GGUF:Q6_K`)
 - Context limiter: `LLM_CTX_SIZE=4096` enforced in backend request assembly
 - No model reload per request:
   - Model is loaded and managed by Docker Model Runner.
@@ -62,12 +62,12 @@ The application supports JWT authentication, per-user persistent chat history, c
 
 ```bash
 export HF_TOKEN=$(cat ~/.cache/huggingface/token)
-./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K
+./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-1B-Instruct-GGUF:Q6_K
 ```
 If your machine has limited RAM/VRAM, use the lower-memory quantization:
 
 ```bash
-./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
+./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M
 ```
 
 The startup script now also auto-fallbacks from `Q6_K` to `Q4_K_M` when model initialization fails (can be disabled with `AUTO_FALLBACK_LOW_MEM=0`).
@@ -95,7 +95,7 @@ Default `.env` values are already configured for this flow:
 
 ```bash
 LLM_BASE_URL=http://model-runner.docker.internal/engines
-LLM_MODEL_NAME=hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K
+LLM_MODEL_NAME=hf.co/bartowski/Llama-3.2-1B-Instruct-GGUF:Q6_K
 LLM_CTX_SIZE=4096
 ```
 Important memory note:
@@ -185,7 +185,7 @@ For local testing without public DNS, keep `DOMAIN=localhost`.
 
 ```bash
 hf auth login
-./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K
+./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-1B-Instruct-GGUF:Q6_K
 ```
 
 ## 7. Run With Docker Compose
@@ -242,7 +242,7 @@ npm run dev
 
 ```bash
 hf auth login
-./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K
+./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-1B-Instruct-GGUF:Q6_K
 ```
 
 1. Start services:

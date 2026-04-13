@@ -16,6 +16,7 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 
 RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
 
@@ -26,6 +27,6 @@ COPY --from=builder /app/.next/static ./.next/static
 USER nextjs
 EXPOSE 3000
 
-HEALTHCHECK CMD wget -q -O - http://localhost:3000/login >/dev/null 2>&1 || exit 1
+HEALTHCHECK CMD wget -q --spider http://127.0.0.1:3000/ || exit 1
 
 CMD ["node", "server.js"]
