@@ -179,7 +179,3 @@ Mitigasi yang dilakukan:
 - Menjalankan model melalui Docker Model Runner agar lifecycle model lebih stabil.
 - Menambahkan healthcheck antar service agar startup lebih terkoordinasi.
 - Menjalankan aplikasi di balik host Nginx dengan redirect HTTP ke HTTPS.
-
-Saran peningkatan:
-
-- Gunakan domain + sertifikat valid CA (Let's Encrypt) untuk menghilangkan warning SSL pada akses publik.
