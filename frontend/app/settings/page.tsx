@@ -91,7 +91,7 @@ export default function SettingsPage() {
 
   return (
     <main className="auth-shell">
-      <section className="auth-card">
+      <section className="auth-card settings-card">
         <h1>Profile Settings</h1>
         <p className="auth-subtitle">Update your username shown in the chat header.</p>
         {loading ? (

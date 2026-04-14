@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { API_BASE_URL, APIError, apiFetch } from "@/lib/api";
 import { clearSession, getEmail, getToken, getUsername, setUsername } from "@/lib/auth";
 
@@ -55,6 +57,20 @@ function formatUpdatedAt(updatedAt: string): string {
   const date = new Date(updatedAt);
   if (Number.isNaN(date.getTime())) {
     return "Updated recently";
+  }
+
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function formatMessageTime(createdAt: string): string {
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) {
+    return "now";
   }
 
   return date.toLocaleString(undefined, {
@@ -550,9 +566,19 @@ export default function ChatShell({ activeChatSlug }: ChatShellProps) {
             <p className="muted">No messages yet. Send the first prompt.</p>
           ) : null}
           {messages.map((msg) => (
-            <article key={msg.id} className={`message ${msg.role}`}>
-              {msg.content}
-            </article>
+            <div key={msg.id} className={`message-row ${msg.role}`}>
+              <p className="message-meta">
+                <span className="message-author">{msg.role === "user" ? profileName : "Llama"}</span>
+                <span className="message-time">{formatMessageTime(msg.created_at)}</span>
+              </p>
+              <article className={`message ${msg.role}`}>
+                {msg.role === "assistant" ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                ) : (
+                  msg.content
+                )}
+              </article>
+            </div>
           ))}
           <div ref={messagesBottomRef} />
         </section>
