@@ -1,31 +1,50 @@
 # Laporan Implementasi Aplikasi Chat AI
 
-## A. Deskripsi Service
+## 1. Deskripsi singkat service yang dibuat
 
-Aplikasi yang dibuat adalah platform chat AI full-stack yang terdiri dari frontend Next.js (App Router), backend Golang REST API, PostgreSQL, dan model AI lokal menggunakan Docker Model Runner.
+Service yang dibuat adalah aplikasi chat AI full-stack dengan komponen:
 
-Untuk deployment publik, arsitektur sekarang menggunakan reverse proxy Caddy sehingga seluruh akses user masuk lewat HTTPS port 443 dengan sertifikat TLS otomatis dari Let's Encrypt.
+- Frontend: Next.js (App Router)
+- Backend: Golang REST API
+- Database: PostgreSQL
+- LLM runtime: Docker Model Runner (OpenAI-compatible endpoint)
+- Reverse proxy publik: Nginx di VPS
 
-Fitur utama:
+Fitur utama aplikasi:
 
 - Registrasi dan login user
 - Autentikasi JWT untuk endpoint terproteksi
-- Penyimpanan riwayat chat per user secara persisten
-- Fitur New Chat untuk memulai percakapan baru
-- Penyimpanan pesan user dan AI ke database
-- Integrasi model `hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K` dari Hugging Face melalui Docker Model Runner
+- Pembuatan chat baru per user
+- Penyimpanan riwayat chat dan pesan (user + AI) ke PostgreSQL
+- Integrasi model Hugging Face melalui Docker Model Runner
 
-Limiter konteks di backend dikonfigurasi dengan `LLM_CTX_SIZE=4096` untuk menjaga pemakaian memori tetap efisien di CPU-only environment.
+Konfigurasi LLM saat ini pada environment:
 
-## B. Penjelasan Endpoint /health
+- `LLM_MODEL_NAME=hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K`
+- `LLM_CTX_SIZE=4096`
+- `LLM_BASE_URL=http://model-runner.docker.internal:12434/engines/v1`
 
-Fungsi endpoint `/health` adalah untuk memantau kesiapan service backend dan dependency utama.
+Arsitektur akses publik saat ini:
+
+- Akses user masuk ke Nginx (port 80/443)
+- Nginx meneruskan `/` ke frontend (`127.0.0.1:3000`)
+- Nginx meneruskan `/api/*` dan `/health` ke backend (`127.0.0.1:8080`)
+
+## 2. Penjelasan endpoint /health
+
+Endpoint health digunakan untuk memantau kesiapan backend beserta dependency utama.
 
 Endpoint:
 
 - `GET /health`
 
-Contoh response extended:
+Perilaku endpoint:
+
+- Melakukan `PingContext` ke PostgreSQL
+- Melakukan health check LLM service (melalui Docker Model Runner)
+- Tetap merespons HTTP 200 agar kompatibel dengan orchestrator/monitoring, dengan detail status pada body
+
+Contoh respons normal:
 
 ```json
 {
@@ -37,7 +56,11 @@ Contoh response extended:
 }
 ```
 
-Contoh response sederhana:
+Mode respons sederhana:
+
+- `GET /health?simple=true`
+
+Contoh:
 
 ```json
 {
@@ -45,95 +68,118 @@ Contoh response sederhana:
 }
 ```
 
-Cara kerja pengecekan service:
+## 3. Screenshot atau bukti endpoint dapat diakses
 
-- Database dicek dengan `PingContext` ke PostgreSQL
-- LLM dicek ringan ke endpoint Docker Model Runner (`/v1/models`)
-- Endpoint tetap mengembalikan HTTP 200 agar orchestration health monitor tetap stabil
+Bukti akses endpoint pada VPS publik:
 
-## C. Bukti Akses Endpoint
+- URL: `https://152.42.223.24/health`
 
-Endpoint dapat diakses publik melalui reverse proxy di port 443 (HTTPS). Service backend/frontend tidak diekspos langsung ke internet.
-
-Contoh URL publik:
-
-- `https://<domain-anda>/health`
-
-Verifikasi cepat:
+Hasil verifikasi dari terminal:
 
 ```bash
-curl https://<domain-anda>/health
+$ curl -vk https://152.42.223.24/health
+...
+< HTTP/2 200
+< server: nginx/1.24.0 (Ubuntu)
+< content-type: application/json
+...
+{"services":{"database":"ok","llm":"ok"},"status":"ok"}
 ```
 
-## D. Proses Build & Run Docker
+Tambahan verifikasi redirect HTTP ke HTTPS:
 
-Langkah build image dan menjalankan container:
+```bash
+$ curl -i http://152.42.223.24/health
+HTTP/1.1 301 Moved Permanently
+Location: https://152.42.223.24/health
+```
 
-1. Salin env file:
-   - `cp .env.example .env`
-2. Isi variabel reverse proxy/TLS pada `.env`:
-   - `DOMAIN=<domain-anda>`
-   - `ACME_EMAIL=<email-anda>`
-3. Login ke Hugging Face dan jalankan model di Docker Model Runner:
-   - `hf auth login`
-   - `./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K`
-4. Build dan jalankan stack:
-   - `docker compose --env-file .env up -d --build`
-5. Cek status dan health:
-   - `docker compose ps`
-   - `curl https://<domain-anda>/health`
+Catatan TLS saat akses via IP:
 
-Penggunaan docker-compose:
+- Sertifikat saat ini self-signed, sehingga `curl` tanpa `-k` akan menampilkan error verifikasi SSL.
 
-- Menjalankan service `db`, `backend`, `frontend`, `reverse-proxy`
-- Semua service memiliki `healthcheck`
-- Dependency antar service menggunakan `depends_on` dengan `condition: service_healthy`
-- Semua service menggunakan restart policy `unless-stopped`
+## 4. Penjelasan proses build dan run Docker
 
-## E. Proses Deployment ke VPS (DigitalOcean)
+Langkah build dan run service aplikasi:
 
-Langkah deploy ke server:
+1. Siapkan environment file.
 
-1. Buat droplet Ubuntu di DigitalOcean
-2. Install Docker Engine dan Docker Compose plugin
-3. Clone repository aplikasi ke VPS
-4. Salin `.env.example` menjadi `.env`, lalu sesuaikan variabel produksi
-5. Login Hugging Face dan jalankan model di Docker Model Runner:
-   - `hf auth login`
-   - `./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K`
-6. Jalankan:
-   - `docker compose --env-file .env up -d --build`
-7. Atur DNS domain ke IP VPS (A record)
-8. Atur firewall DigitalOcean dan UFW untuk membuka port yang dibutuhkan:
-   - `80/tcp` untuk challenge Let's Encrypt dan redirect
-   - `443/tcp` untuk trafik HTTPS utama
-9. Uji endpoint publik:
-   - `curl https://<domain-anda>/health`
+```bash
+cp .env.example .env
+```
 
-Konfigurasi yang dilakukan:
+2. Sesuaikan nilai penting pada `.env` (minimal `JWT_SECRET`, dan parameter LLM jika diperlukan).
 
-- Konfigurasi environment production
-- Reverse proxy Caddy sebagai single entrypoint publik di port 443
-- TLS otomatis Let's Encrypt
-- Integrasi backend ke PostgreSQL internal compose
-- Integrasi backend ke Docker Model Runner melalui `model-runner.docker.internal`
+3. Login Hugging Face (agar model dapat di-pull oleh Docker Model Runner).
 
-Cara menjalankan di VPS:
+```bash
+hf auth login
+```
 
-- Start: `docker compose --env-file .env up -d`
-- Stop: `docker compose down`
-- Logs: `docker compose logs -f`
+4. Jalankan model di Docker Model Runner.
 
-## F. Kendala yang Dihadapi
+```bash
+./scripts/docker-model-run.sh hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q6_K
+```
 
-Kendala utama:
+5. Build dan jalankan stack utama (DB + backend + frontend).
 
-- Ukuran model LLM cukup besar dan membutuhkan RAM yang memadai
-- Waktu warm-up model lebih lama dibanding service biasa
-- Sertifikat TLS valid butuh domain yang sudah mengarah ke VPS
+```bash
+docker compose --env-file .env up -d --build db backend frontend
+```
 
-Solusi:
+Alternatif one-command bootstrap:
 
-- Menjalankan model lewat Docker Model Runner agar lifecycle model dikelola terpusat
-- Menambahkan healthcheck dan dependency health agar backend hanya start saat dependency siap
-- Menggunakan Caddy agar provisioning dan renew sertifikat Let's Encrypt berjalan otomatis
+```bash
+./scripts/up-with-dmr.sh
+```
+
+6. Verifikasi status container.
+
+```bash
+docker compose ps
+```
+
+## 5. Penjelasan proses deployment ke VPS
+
+Deployment aktual untuk VPS IP `152.42.223.24`:
+
+1. Provision server Ubuntu di DigitalOcean.
+2. Install Docker Engine, Docker Compose plugin, dan Nginx.
+3. Clone repository ke VPS.
+4. Salin `.env.example` menjadi `.env`, lalu sesuaikan environment produksi.
+5. Login Hugging Face dan jalankan model lewat Docker Model Runner.
+6. Jalankan service aplikasi dengan Docker Compose (db, backend, frontend).
+7. Terapkan konfigurasi host Nginx dari `deploy/nginx/day1-ncc.conf` ke `/etc/nginx/sites-available/`, aktifkan di `sites-enabled`, lalu reload Nginx.
+8. Pastikan sertifikat SSL untuk IP tersedia di:
+   - `/etc/ssl/certs/day1-ncc-ip.crt`
+   - `/etc/ssl/private/day1-ncc-ip.key`
+9. Buka firewall port `80/tcp` dan `443/tcp`.
+10. Uji endpoint publik:
+
+```bash
+curl -k https://152.42.223.24/health
+```
+
+Ringkasan alur trafik:
+
+- Port publik: 80 (redirect) dan 443 (HTTPS)
+- Nginx sebagai single entrypoint
+- Service aplikasi tetap di loopback host (`127.0.0.1`) untuk membatasi eksposur langsung
+
+## 6. Kendala yang dihadapi (jika ada)
+
+Kendala yang muncul selama implementasi/deploy:
+
+- Inisialisasi model LLM membutuhkan resource RAM besar dan waktu warm-up lebih lama.
+- Akses HTTPS berbasis IP menggunakan sertifikat self-signed, sehingga klien standar akan memberi peringatan SSL.
+
+Mitigasi yang dilakukan:
+
+- Menjalankan model melalui Docker Model Runner agar lifecycle model lebih stabil.
+- Menambahkan healthcheck antar service agar startup lebih terkoordinasi.
+- Menjalankan aplikasi di balik host Nginx dengan redirect HTTP ke HTTPS.
+
+Saran peningkatan:
+
+- Gunakan domain + sertifikat valid CA (Let's Encrypt) untuk menghilangkan warning SSL pada akses publik.
