@@ -327,3 +327,52 @@ Alternative with host Nginx:
 - Lightweight health checks
 - Graceful shutdown in backend server
 - Basic request rate limiting middleware
+
+## 11. CI/CD With Jenkins + SonarQube
+
+### Start the CI stack
+
+1. Create the shared Docker network:
+
+```bash
+docker network create jenkins
+```
+
+1. Build and run Jenkins + SonarQube:
+
+```bash
+docker compose -f docker-compose.jenkins-sonarqube.yml up -d --build
+```
+
+1. Open the services:
+
+- Jenkins: `http://127.0.0.1:8080/jenkins`
+- SonarQube: `http://127.0.0.1:9000/sonarqube`
+
+Default SonarQube login is `admin` / `admin` (you will be asked to change it).
+
+### Jenkins setup (one time)
+
+1. Unlock Jenkins using `/var/jenkins_home/secrets/initialAdminPassword`.
+1. Install recommended plugins (GitHub and SonarQube Scanner are required).
+1. Manage Jenkins -> System:
+  - Add SonarQube server with name `SonarQube`.
+  - Server URL: `http://sonarqube:9000/sonarqube`.
+  - Add a token credential (Secret text) from SonarQube.
+1. Manage Jenkins -> Tools:
+  - Add SonarQube Scanner tool named `SonarQube Scanner`.
+1. Create a Pipeline job that uses the repository Jenkinsfile.
+1. If the repository is private, set `GIT_CREDENTIALS_ID` to a Jenkins credential.
+
+### Webhook trigger
+
+- In Jenkins job settings: enable GitHub hook trigger for GITScm polling.
+- In GitHub repo settings: add webhook URL `http(s)://<jenkins-host>/jenkins/github-webhook/`.
+
+### Build badge
+
+Use the Jenkins badge URL (replace placeholders):
+
+```text
+http(s)://<jenkins-host>/jenkins/job/<job-name>/badge/icon
+```
