@@ -15,3 +15,11 @@ scrape_configs:
       - targets: ["node_exporter:9100"]
         labels:
           instance: "prometheus-host"
+
+rule_files:
+  - /etc/prometheus/alert.rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
